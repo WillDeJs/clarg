@@ -19,7 +19,7 @@ fn main() {
         .arg(Arg::boolean("json", None, "Format output as JSON"))
         .arg(Arg::string(
             "path",
-            Some('f'),
+            Some('p'),
             true,
             "Directory to examine",
         ))
@@ -46,7 +46,7 @@ options:
 -V,  --verbose                                  verbose execution
 -r,  --recurse                                  Recursive execution
      --json                                     Format output as JSON
--f,  --path <PATH>                              Directory to examine.
+-p,  --path <PATH>                              Directory to examine.
 -h,  --help                                     Print this help message
 ```
 
