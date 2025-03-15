@@ -37,7 +37,7 @@ fn main() {
 The code above when call would behave in the following manner:
 `fdup.exe -h`
 
-<pre>
+```
 Find duplicate files.
 Usage: fdup.exe  --path <PATH>
 
@@ -48,7 +48,7 @@ options:
      --json                                     Format output as JSON
 -f,  --path <PATH>                              Directory to examine.
 -h,  --help                                     Print this help message
-</pre>
+```
 
 When given incorrect arguments:
 `fdup.exe`
