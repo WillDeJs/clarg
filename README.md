@@ -52,7 +52,7 @@ options:
 
 When given incorrect arguments:
 `fdup.exe`
-<pre>
+```
 Missing required argument:
 Usage: fdup.exe  --path <PATH>
-</pre>
+```
