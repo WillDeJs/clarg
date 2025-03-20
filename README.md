@@ -1,5 +1,5 @@
 # Description
-Simple naive argument parser written for my personal projects. 
+Simple naive argument parser written for small projects. 
 
 > [!NOTE]
 > Inspired by Clap but simpler and with no dependencies.
