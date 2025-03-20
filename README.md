@@ -2,10 +2,7 @@
 Simple naive argument parser written for my personal projects. 
 
 > [!NOTE]
-> Heavily inspired by CLAP. 
-
-> [!CAUTION]
-> Don't use this, use CLAP instead.
+> Inspired by Clap but simpler and with no dependencies.
 
 # Example
 
