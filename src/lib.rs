@@ -201,7 +201,7 @@ impl ArgParser {
                     ArgKind::Boolean => format!("--{}", arg.long_name),
 
                     // any other argument kind, has an expected argument
-                    _ => format!("--{} {} ", arg.long_name, arg.long_name.to_uppercase()),
+                    _ => format!("--{} <{}> ", arg.long_name, arg.long_name.to_uppercase()),
                 };
 
                 if arg.required {
