@@ -1,5 +1,24 @@
-use std::{collections::HashMap, fmt::Display, process::exit, str::FromStr};
+//! Crate to parse command line arguments and generate help/documentation for for the program.
+//!
+//! # Example
+//! ```no_run
+//!l et arguments = ArgParser::new("Find duplicate files.")
+//!         .arg(Arg::boolean("verbose", Some('V'), "verbose execution"))
+//!         .arg(Arg::boolean("recurse", Some('r'), "Recursive execution"))
+//!         .arg(Arg::boolean("json", None, "Format output as JSON"))
+//!         .arg(Arg::string("path", Some('f'), true, "Directory to examine"))
+//!         .parse();
+//!     
+//! let path = arguments.get::<String>("path").unwrap();
+//! let verbose = arguments.get::<bool>("verbose").unwrap_or(false);
+//! let count = arguments.get::<i32>("count").unwrap_or(4);
+//! let json_output = arguments.get::<bool>("json").unwrap_or(false);
+//! ```
+//!
+//!
+use std::{clone, collections::HashMap, fmt::Display, process::exit, str::FromStr};
 
+const ARG_PADDING: usize = 9;
 /// Struct to represent the type of arguments that the user can pass to this program.
 #[derive(Default)]
 pub enum ArgKind {
@@ -89,27 +108,6 @@ impl Arg {
     }
 }
 
-impl Display for Arg {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let sample_usage = match self.kind {
-            ArgKind::Boolean => self.long_name.clone(),
-            _ => format!("{} <{}>", self.long_name, self.long_name.to_uppercase()),
-        };
-        match self.short_name.as_ref() {
-            Some(short_name) => {
-                write!(
-                    f,
-                    "-{},  --{:<40} {}",
-                    short_name, sample_usage, self.description
-                )
-            }
-            _ => {
-                write!(f, "{:4} --{:<40} {}", "", sample_usage, self.description)
-            }
-        }
-    }
-}
-
 /// Wrapper around a map of arguments passed by the user.
 #[derive(Debug)]
 pub struct ArgMap {
@@ -120,6 +118,11 @@ impl ArgMap {
     /// Get the value for a given argument if it exists and cast it to the type requested.
     /// # Arguments
     /// `name` name for the argument being requested.
+    /// # Returns
+    /// The given argument casted to the type `T`.
+    ///
+    /// # Errors
+    /// If the argument does not exist or cannot be casted into `T`.
     pub fn get<T: FromStr>(&self, name: &str) -> Result<T, String> {
         if let Some(value) = self.inner.get(name) {
             value.parse::<T>().map_err(|_| {
@@ -136,6 +139,8 @@ impl ArgMap {
     /// Get the value for a given argument if it exists.
     /// # Arguments
     /// `name` name for the argument being requested.
+    /// # Returns
+    ///
     pub fn get_raw(&self, name: &str) -> Option<&String> {
         self.inner.get(name)
     }
@@ -175,6 +180,8 @@ impl ArgParser {
     /// Add a new argument requirement to the parser.
     /// # Arguments
     /// `arg` Argument requirements.
+    /// # Returns
+    ///  The argument parser itself. Useful for chaining.
     pub fn arg(mut self, arg: Arg) -> Self {
         // we don't allow overriding help
         if arg.long_name != "help" && arg.short_name != Some('h') {
@@ -188,9 +195,24 @@ impl ArgParser {
         let example = self
             .args
             .iter()
-            .filter(|arg| arg.required)
-            .map(|arg| format!(" --{} <{}>", arg.long_name, arg.long_name.to_uppercase()))
+            .map(|arg| {
+                let arg_desc = match arg.kind {
+                    // boolean flags don't have argument
+                    ArgKind::Boolean => format!("--{}", arg.long_name),
+
+                    // any other argument kind, has an expected argument
+                    _ => format!("--{} {} ", arg.long_name, arg.long_name.to_uppercase()),
+                };
+
+                if arg.required {
+                    arg_desc
+                } else {
+                    // denote optional arguments by surrounding in []
+                    format!("[{arg_desc}]")
+                }
+            })
             .fold(String::new(), |mut old, new| {
+                old.push(' ');
                 old.push_str(&new);
                 old
             });
@@ -205,19 +227,55 @@ impl ArgParser {
         println!("{}", self.description);
         self.usage();
         println!("\noptions:");
-        println!("‾‾‾‾‾‾‾‾");
+        println!("-------");
+
+        // calculate the maximum width of the argument name.
+        let max_length = self.args.iter().fold(0, |max, arg| match arg.kind {
+            // boolean arguments don't have to repeate their name, only count once
+            ArgKind::Boolean => max.max(arg.long_name.len() + ARG_PADDING),
+
+            // any other argument has 2 times the length + some padding when printed, account for it.
+            // we assume the maximum usage like "--Argument <ARGUMENT>" (arg.len * 2 + at least 5 args) and add some padding
+            _ => max.max(arg.long_name.len() * 2 + ARG_PADDING),
+        });
+
+        // Print each argument and it's description for the help message.
         for arg in &self.args {
-            println!("{arg}");
+            let sample_usage = match arg.kind {
+                ArgKind::Boolean => arg.long_name.clone(),
+                _ => format!("{} <{}>", arg.long_name, arg.long_name.to_uppercase()),
+            };
+
+            // format the shortname, if available
+            let short_name = match arg.short_name {
+                Some(c) => format!("-{c},"),
+                None => format!("   "),
+            };
+
+            println!(
+                "{} --{:<width$} {}",
+                short_name,
+                sample_usage,
+                arg.description,
+                width = max_length
+            );
         }
         println!(
-            "{}",
-            Arg::boolean("help", Some('h'), "Print this help message")
-        )
+            "-h, --{:<width$} Print this help message",
+            "help",
+            width = max_length
+        );
     }
 
     /// Parse user command line arguments into a Map struct.
-    /// This parsing follows the argument requirements selected.
+    /// This parsing follows the argument requirements selected and consumes the parser.
+    /// # Returns
+    /// A map with all the parsed arguments.
+    ///
+    /// # Panics
     /// It errors and stops execution when the argument requirements cannot be enforced.
+    /// Not being able to parse the arguments is considered a fatal error and the program
+    /// execution halts with a call to exit(0).
     pub fn parse(mut self) -> ArgMap {
         let mut argument_map: HashMap<String, String> = HashMap::new();
         let mut positional_index = 0;
@@ -248,7 +306,7 @@ impl ArgParser {
                             _ => {
                                 eprintln!("Missing value for argument: --{}", arg_name);
                                 self.usage();
-                                exit(0)
+                                exit(1)
                             }
                         },
 
@@ -261,13 +319,13 @@ impl ArgParser {
                                 } else {
                                     eprintln!("Cannot convert `{}` into integer.", value);
                                     self.usage();
-                                    exit(0)
+                                    exit(1)
                                 }
                             }
                             _ => {
                                 eprintln!("Missing value for argument: --{}", arg_name);
                                 self.usage();
-                                exit(0)
+                                exit(1)
                             }
                         },
 
@@ -283,13 +341,13 @@ impl ArgParser {
                                         value
                                     );
                                     self.usage();
-                                    exit(0)
+                                    exit(1)
                                 }
                             }
                             _ => {
                                 eprintln!("Missing value for argument: --{}", arg_name);
                                 self.usage();
-                                exit(0)
+                                exit(1)
                             }
                         },
 
@@ -310,7 +368,7 @@ impl ArgParser {
             if arg.required && !arg.scanned {
                 eprintln!("Missing required argument:");
                 self.usage();
-                exit(0);
+                exit(1);
             }
         });
         ArgMap {
