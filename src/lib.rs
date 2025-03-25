@@ -195,28 +195,19 @@ impl ArgParser {
         let example = self
             .args
             .iter()
-            .map(|arg| {
-                let arg_desc = match arg.kind {
-                    // boolean flags don't have argument
-                    ArgKind::Boolean => format!("--{}", arg.long_name),
-
-                    // any other argument kind, has an expected argument
-                    _ => format!("--{} <{}> ", arg.long_name, arg.long_name.to_uppercase()),
-                };
-
-                if arg.required {
-                    arg_desc
-                } else {
-                    // denote optional arguments by surrounding in []
-                    format!("[{arg_desc}]")
-                }
-            })
+            .filter(|arg| arg.required)
+            .map(|arg| format!("--{} <{}> ", arg.long_name, arg.long_name.to_uppercase()))
             .fold(String::new(), |mut old, new| {
                 old.push(' ');
                 old.push_str(&new);
                 old
             });
-        println!("Usage: {} {}", self.executable, example);
+        let options = if self.args.iter().any(|arg| !arg.required) {
+            " [options] "
+        } else {
+            " "
+        };
+        println!("Usage: {}{}{}", self.executable, options, example);
     }
 
     /// Prints the help page for this executable
