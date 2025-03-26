@@ -36,20 +36,20 @@ The code above when call would behave in the following manner:
 
 ```
 Find duplicate files.
-Usage: fdup.exe  --path <PATH>
+Usage: fdup.exe [options]  --path <PATH> 
 
 options:
-‾‾‾‾‾‾‾‾
--V,  --verbose                                  verbose execution
--r,  --recurse                                  Recursive execution
-     --json                                     Format output as JSON
--p,  --path <PATH>                              Directory to examine.
--h,  --help                                     Print this help message
+-------
+-V, --verbose           verbose execution
+-r, --recurse           Recursive execution
+    --json              Format output as JSON
+-f, --path <PATH>       Directory to examine
+-h, --help              Print this help message
 ```
 
 When given incorrect arguments:
 `fdup.exe`
 ```
 Missing required argument:
-Usage: fdup.exe  --path <PATH>
+Usage: fdup.exe [options]  --path <PATH>
 ```
