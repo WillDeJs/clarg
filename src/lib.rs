@@ -222,7 +222,7 @@ impl ArgParser {
 
         // calculate the maximum width of the argument name.
         let max_length = self.args.iter().fold(0, |max, arg| match arg.kind {
-            // boolean arguments don't have to repeate their name, only count once
+            // boolean arguments don't have to repeat their name, only count once
             ArgKind::Boolean => max.max(arg.long_name.len() + ARG_PADDING),
 
             // any other argument has 2 times the length + some padding when printed, account for it.
@@ -269,7 +269,6 @@ impl ArgParser {
     /// execution halts with a call to exit(0).
     pub fn parse(mut self) -> ArgMap {
         let mut argument_map: HashMap<String, String> = HashMap::new();
-        let mut positional_index = 0;
 
         // skip executable name
         let mut arguments = std::env::args().skip(1);
@@ -348,11 +347,15 @@ impl ArgParser {
                             argument_map.insert(inner.long_name.clone(), "true".to_owned());
                         }
                     }
+                } else {
+                    // Got an unexpected argument, error now.
+                    eprintln!("Unrecognized option `{arg}` passed.");
+                    exit(1);
                 }
             } else {
-                // Positional arguments are added with their "index" (order of appearance of positional arguments)
-                argument_map.insert(format!("{positional_index}"), arg);
-                positional_index += 1;
+                // Got an unexpected argument, error now.
+                eprintln!("Unexpected argument option `{arg}` passed.");
+                exit(1);
             }
         }
         self.args.iter().for_each(|arg| {
