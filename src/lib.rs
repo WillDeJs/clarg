@@ -16,7 +16,7 @@
 //! ```
 //!
 //!
-use std::{clone, collections::HashMap, fmt::Display, process::exit, str::FromStr};
+use std::{collections::HashMap, process::exit, str::FromStr};
 
 const ARG_PADDING: usize = 9;
 /// Struct to represent the type of arguments that the user can pass to this program.
@@ -151,12 +151,75 @@ impl ArgMap {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum GroupKind {
+    Exclusive,
+    OnlyWhen,
+}
+
+/// An argument group. Helps isolate arguments that only apply as combination.
+/// When using groups a requirement is implemented on the user to not use the same name for
+/// any of the arguments in the  group or outside it.
+pub struct ArgGroup {
+    name: String,
+    kind: GroupKind,
+    required: bool,
+    /// main arguments to match
+    args: Vec<String>,
+
+    /// secondary arguments to match, see "OnlyIf"
+    parents: Vec<String>,
+}
+
+impl ArgGroup {
+    fn new(name: &str, kind: GroupKind, args1: &[&str], args2: &[&str], required: bool) -> Self {
+        let args1: Vec<String> = args1.iter().map(|e| e.to_string()).collect();
+        let args2: Vec<String> = args2.iter().map(|e| e.to_string()).collect();
+        Self {
+            name: name.to_string(),
+            kind,
+            args: args1,
+            parents: args2,
+            required,
+        }
+    }
+    pub fn contains(&self, name: &String) -> bool {
+        self.args.contains(&name.to_owned())
+    }
+    pub fn kind(&self) -> GroupKind {
+        self.kind
+    }
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+    pub fn args(&self) -> &Vec<String> {
+        &self.args
+    }
+    pub fn parents(&self) -> &Vec<String> {
+        &self.parents
+    }
+    pub fn is_required(&self) -> bool {
+        self.required
+    }
+    /// Requires at least one of the items in the group arguments
+    /// to be present.
+    pub fn allow_when(name: &str, required: bool, args: &[&str], parents: &[&str]) -> Self {
+        ArgGroup::new(name, GroupKind::OnlyWhen, args, parents, required)
+    }
+    /// Requires at least one of the items in the group arguments
+    /// to be present.
+    pub fn exclusive(name: &str, required: bool, args: &[&str]) -> Self {
+        ArgGroup::new(name, GroupKind::Exclusive, args, &[], required)
+    }
+}
+
 /// General argument parser.
 /// Created to avoid a dependency on CLAP which was used during prototyping.
 pub struct ArgParser {
     executable: String,
     description: String,
     args: Vec<Arg>,
+    groups: Vec<ArgGroup>,
 }
 impl ArgParser {
     /// Creates a new argument parser.
@@ -174,7 +237,12 @@ impl ArgParser {
             executable,
             description: description.to_owned(),
             args: Vec::new(),
+            groups: Vec::new(),
         }
+    }
+    pub fn add_group(mut self, group: ArgGroup) -> Self {
+        self.groups.push(group);
+        self
     }
 
     /// Add a new argument requirement to the parser.
@@ -192,12 +260,26 @@ impl ArgParser {
 
     /// Prints the program's usage.
     pub fn usage(&self) {
+        let group_example = self
+            .groups
+            .iter()
+            .filter(|group| group.is_required())
+            .map(|g| match g.kind() {
+                GroupKind::Exclusive => format!("<{}>", g.args().join(" | ")),
+                GroupKind::OnlyWhen => String::new(),
+            })
+            .fold(String::new(), |mut acc, new| {
+                // match group being required but argument's that are group, should not be marked as such
+                acc.push_str(&new);
+                acc
+            });
+
         let example = self
             .args
             .iter()
             .filter(|arg| arg.required)
             .map(|arg| format!("--{} <{}> ", arg.long_name, arg.long_name.to_uppercase()))
-            .fold(String::new(), |mut old, new| {
+            .fold(String::new(), |mut old: String, new| {
                 old.push(' ');
                 old.push_str(&new);
                 old
@@ -207,7 +289,10 @@ impl ArgParser {
         } else {
             " "
         };
-        println!("Usage: {}{}{}", self.executable, options, example);
+        println!(
+            "Usage: {}{}{}{}",
+            self.executable, options, group_example, example
+        );
     }
 
     /// Prints the help page for this executable
@@ -256,6 +341,33 @@ impl ArgParser {
             "help",
             width = max_length
         );
+        if !self.groups.is_empty() {
+            println!("\nNotes on argument groups:");
+            for group in &self.groups {
+                let arguments: Vec<String> = self
+                    .args
+                    .iter()
+                    .filter(|arg| group.contains(&arg.long_name))
+                    .map(|arg| match arg.kind {
+                        ArgKind::Boolean => arg.long_name.clone(),
+                        _ => format!("--{} <{}>", arg.long_name, arg.long_name.to_uppercase()),
+                    })
+                    .collect();
+                let parent_arguments: Vec<String> = self
+                    .args
+                    .iter()
+                    .filter(|arg| group.parents().contains(&arg.long_name))
+                    .map(|arg| match arg.kind {
+                        ArgKind::Boolean => arg.long_name.clone(),
+                        _ => format!("--{} <{}>", arg.long_name, arg.long_name.to_uppercase()),
+                    })
+                    .collect();
+                match group.kind() {
+                    GroupKind::Exclusive => println!("The following option(s) are mutually exclusive and cannot be used together:\n\t{}", arguments.join("\n\t")),
+                    GroupKind::OnlyWhen => println!("The option(s): \n\t{}\nCan only be used in conjunction with: \n\t{}", arguments.join("\n\t"), parent_arguments.join("\n\t")) 
+                }
+            }
+        }
     }
 
     /// Parse user command line arguments into a Map struct.
@@ -290,6 +402,14 @@ impl ArgParser {
                         ArgKind::String => match arguments.next() {
                             // got a string, don't worry about any conversion
                             Some(value) => {
+                                if value.starts_with('-') {
+                                    eprintln!(
+                                        "Unexpected value `{value}` for argument: --{}",
+                                        arg_name
+                                    );
+                                    self.usage();
+                                    exit(1)
+                                }
                                 inner.scanned = true; // we got this value, don't expect
                                 argument_map.insert(inner.long_name.clone(), value);
                             }
@@ -350,17 +470,111 @@ impl ArgParser {
                 } else {
                     // Got an unexpected argument, error now.
                     eprintln!("Unrecognized option `{arg}` passed.");
+                    self.usage();
                     exit(1);
                 }
             } else {
                 // Got an unexpected argument, error now.
                 eprintln!("Unexpected argument option `{arg}` passed.");
+                self.usage();
                 exit(1);
+            }
+        }
+        if !self.groups.is_empty() {
+            for group in &self.groups {
+                if group.is_required() {
+                    match group.kind() {
+                        GroupKind::Exclusive => {
+                            let use_count = self.args.iter().fold(0, |sum, item| {
+                                if group.args().contains(&item.long_name) && item.scanned {
+                                    sum + 1
+                                } else {
+                                    sum
+                                }
+                            });
+                            if use_count > 1 {
+                                eprintln!("Misuse of exclusive argument(s). Only one of the following must be used: [{}]", group.args().join(", "));
+                                self.usage();
+                                exit(1)
+                            } else if use_count == 0 {
+                                eprintln!("Missing required exclusive argument(s). One of the following must be used: [{}]", group.args().join(", "));
+                                self.usage();
+                                exit(1)
+                            }
+                        }
+                        GroupKind::OnlyWhen => {
+                            let use_count = self.args.iter().fold(0, |sum, item| {
+                                if group.args().contains(&item.long_name) && item.scanned {
+                                    sum + 1
+                                } else {
+                                    sum
+                                }
+                            });
+                            let parent_count = self.args.iter().fold(0, |sum, item| {
+                                if group.parents().contains(&item.long_name) && item.scanned {
+                                    sum + 1
+                                } else {
+                                    sum
+                                }
+                            });
+                            if use_count == 0 {
+                                eprintln!("Missing matching argument(s). One of the following must be used: [{}]", group.args().join(", "));
+                                self.usage();
+                                exit(1)
+                            } else if parent_count == 0 {
+                                eprintln!("Missing matching parent argument. Options like [{}] need to be used with: [{}].",group.args().join(", "), group.parents().join(", "));
+                                self.usage();
+                                exit(1)
+                            }
+                        }
+                    }
+                } else {
+                    match group.kind() {
+                        GroupKind::Exclusive => {
+                            let use_count = self.args.iter().fold(0, |sum, item| {
+                                if group.contains(&item.long_name) && item.scanned {
+                                    sum + 1
+                                } else {
+                                    sum
+                                }
+                            });
+                            if use_count > 1 {
+                                eprintln!(
+                                    "Cannot use the following arguments together: [{}]",
+                                    group.args().join(", ")
+                                );
+                                self.usage();
+                                exit(1)
+                            }
+                        }
+                        GroupKind::OnlyWhen => {
+                            let use_count = self.args.iter().fold(0, |sum, item| {
+                                if group.contains(&item.long_name) && item.scanned {
+                                    sum + 1
+                                } else {
+                                    sum
+                                }
+                            });
+                            let parents_in_use = self.args.iter().fold(0, |sum, item| {
+                                if group.parents().contains(&item.long_name) && item.scanned {
+                                    sum + 1
+                                } else {
+                                    sum
+                                }
+                            });
+                            if use_count > 0 && parents_in_use == 0 {
+                                eprintln!("Missing arguments. Options like [{}] need to be used with: [{}].",group.args().join(", "), group.parents().join(", "));
+                                self.usage();
+                                exit(1)
+                            }
+                        }
+                    }
+                }
             }
         }
         self.args.iter().for_each(|arg| {
             if arg.required && !arg.scanned {
-                eprintln!("Missing required argument:");
+                eprintln!("Missing required argument: `{}`", arg.long_name);
                 self.usage();
                 exit(1);
             }
