@@ -349,7 +349,7 @@ impl ArgParser {
                     .iter()
                     .filter(|arg| group.contains(&arg.long_name))
                     .map(|arg| match arg.kind {
-                        ArgKind::Boolean => arg.long_name.clone(),
+                        ArgKind::Boolean => format!("--{}", arg.long_name.clone()),
                         _ => format!("--{} <{}>", arg.long_name, arg.long_name.to_uppercase()),
                     })
                     .collect();
@@ -358,7 +358,7 @@ impl ArgParser {
                     .iter()
                     .filter(|arg| group.parents().contains(&arg.long_name))
                     .map(|arg| match arg.kind {
-                        ArgKind::Boolean => arg.long_name.clone(),
+                        ArgKind::Boolean => format!("--{}", arg.long_name.clone()),
                         _ => format!("--{} <{}>", arg.long_name, arg.long_name.to_uppercase()),
                     })
                     .collect();
