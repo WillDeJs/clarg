@@ -2,7 +2,8 @@
 //!
 //! # Example
 //! ```no_run
-//!l et arguments = ArgParser::new("Find duplicate files.")
+//!# use clarg::{Arg, ArgGroup, ArgParser};
+//! let arguments = ArgParser::new("Find duplicate files.")
 //!         .arg(Arg::boolean("verbose", Some('V'), "verbose execution"))
 //!         .arg(Arg::boolean("recurse", Some('r'), "Recursive execution"))
 //!         .arg(Arg::boolean("json", None, "Format output as JSON"))
